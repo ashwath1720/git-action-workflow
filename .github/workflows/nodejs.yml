@@ -1,23 +1,37 @@
 name: Node CI
 
-on: [push]
+on: [pull_request]
 
 jobs:
   build:
-
+    env:
+      NODE_VERSION: 12.x
+    
     runs-on: ubuntu-latest
-
- 
+    
     steps:
     - uses: actions/checkout@v1
-    - name: Use Node.js ${{ matrix.node-version }}
+    
+    - name: Add comment 
+      if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+      uses: actions/github@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        args: comment "Thank you for opening this pull request :tada::sparkles:"
+      
+    - name: Cache dependencies
+      uses: actions/cache@v1
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+    
+    - name: Use Node.js ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v1
       with:
-        node-version: 12.x
-    - name: Run linter
-      run: |
-         npm install eslint --save-dev
-         ./node_modules/.bin/eslint --no-eslintrc
+        node-version: ${{ env.NODE_VERSION }}
     
     - name: npm install, build, and test
       run: |
@@ -26,4 +40,71 @@ jobs:
         npm test
       env:
         CI: true
+
+    - name: Run linter
+      run: |
+        npm install eslint --save-dev
+        ./node_modules/.bin/eslint --no-eslintrc .
+    
+    - uses: octokit/request-action@v1.x
+      id: create_deployment
+      with:
+        route: POST /repos/:owner/:repo/deployments
+        ref: ${{ github.event.pull_request.head.ref }}
+        required_contexts: "[]"
+        environment: "review"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: gr2m/get-json-paths-action@v1.x
+      id: parse_deployment
+      with:
+        json: ${{ steps.create_deployment.outputs.data }}
+        id: "id"
+
+    - name: Deploy to Zeit
+      uses: amondnet/now-deployment@v1
+      id: zeit_deployment
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        zeit-token: ${{ secrets.ZEIT_TOKEN }}
+
+    - uses: octokit/request-action@v1.x
+      with:
+        route: POST /repos/:owner/:repo/deployments/:deployment_id/statuses
+        deployment_id: ${{ steps.parse_deployment.outputs.id }}
+        environment: "review"
+        state: "success"
+        target_url: ${{ steps.zeit_deployment.outputs.preview-url }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: octokit/request-action@v1.x
+      if: failure()
+      with:
+        route: POST /repos/:owner/:repo/deployments/:deployment_id/statuses
+        deployment_id: ${{ steps.parse_deployment.outputs.id }}
+        environment: "review"
+        state: "failure"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: npm install, build, and test
+      run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      env:
+        CI: true
         NODE_VERSION: ${{ env.NODE_VERSION }}
+    - uses: actions/cache@v1
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+    - name: Upload report
+      uses: actions/upload-artifact@master
+      with:
+        name: coverage
+        path: ${{ github.workspace }}/coverage 
