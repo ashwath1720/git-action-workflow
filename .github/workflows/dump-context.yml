@@ -23,7 +23,6 @@ jobs:
           RUNNER_CONTEXT: ${{ toJson(runner) }}
         run: echo "$RUNNER_CONTEXT"
       - name: Outputs 
-      - name: Outputs 
         env:
          EVENT_NAME: ${{ github.event_name }}
          REF: ${{ github.ref }}
