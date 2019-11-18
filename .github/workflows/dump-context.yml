@@ -31,4 +31,4 @@ jobs:
         run: |
          echo "Event name $EVENT_NAME and ref $REF"
          echo "$ROBOT"
-    echo "$ROBOT"
+         echo "$ROBOT"
