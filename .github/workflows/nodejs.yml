@@ -33,3 +33,9 @@ jobs:
         key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
         restore-keys: |
           ${{ runner.os }}-node-
+    - name: Cache dependencies
+    - name: Upload report
+      uses: actions/upload-artifact@master
+      with:
+        name: coverage
+        path: ${{ github.workspace }}/coverage 
